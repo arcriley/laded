@@ -25,13 +25,13 @@
 # Directives defining package identity for Cargo
 [package]
 name = "laded"
-version = "1.0.0"
+version = "1.1.0"
 edition = "2021"
 authors = ["Emerge Cooperative"]
 license = "MIT"
 description = "A chunk-based file downloader and XML catalog archiving engine."
 repository = "https://github.com/arcriley/laded"
-homepage = "https://github.com/your-username/laded"
+homepage = "https://github.com/arcriley/laded"
 documentation = "https://docs.rs/laded"
 readme = "README.md"
 keywords = ["download", "catalog", "gguf", "manifest", "chunk"]

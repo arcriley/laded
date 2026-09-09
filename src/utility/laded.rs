@@ -1,4 +1,4 @@
-/*  src/utility/laded.rs  CLI tool for catalog creation and downloading.
+/*  utility/laded.rs  CLI utility for laded
  *
  *  Copyright 2026 Emerge Cooperative
  *
@@ -23,19 +23,20 @@
  *  SOFTWARE.
  *                                                                    */
 
-
-use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
-use laded::{Builder, Catalog, Downloader};
+use laded::builder::Builder;
+use laded::catalog::Catalog;
+use laded::downloader::Downloader;
+use laded::error::Error;
 use std::fs;
 use std::io::{self, Write};
 use std::path::PathBuf;
 
+const DEFAULT_CHUNK_SIZE: u32 = 1048576; // 1MB default chunk size
+
 #[derive(Parser)]
 #[command(name = "laded")]
-#[command(
-    about = "Chunked file downloader and XML catalog generator",
-    long_about = None)]
+#[command(about = "CLI tool to inspect, pack, and fetch lading files")]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -43,210 +44,182 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Pack a local file into an XML catalog manifest
+    /// Pack a file into a .lading XML catalog
     Pack {
-        /// Local file path to index into catalog
-        #[arg(short, long)]
+        /// Input file path to generate catalog for
+        #[arg(long)]
         input: PathBuf,
 
-        /// Output catalog XML file path (stdout if omitted)
-        #[arg(short, long)]
+        /// Output .lading catalog path (writes to stdout if omitted)
+        #[arg(long)]
         output: Option<PathBuf>,
 
-        /// Chunk size in bytes (default: 10485760 / 10MB)
-        #[arg(short, long, default_value_t = 10485760)]
-        chunk_size: u32,
-
-        /// Optional descriptive title
+        /// Title metadata field
         #[arg(long)]
         title: Option<String>,
 
-        /// Model family (e.g. "Llama")
+        /// Family metadata field
         #[arg(long)]
         family: Option<String>,
 
-        /// Parameter size indicator (e.g. "7B")
-        #[arg(long)]
-        model_size: Option<String>,
-
-        /// Quantization format (e.g. "Q5_K_M")
+        /// Quantization metadata field
         #[arg(long)]
         quantization: Option<String>,
 
-        /// Fine-tuning/adaptation descriptor
-        #[arg(long)]
-        adaptation: Option<String>,
-
-        /// Additional key/value model parameters
-        #[arg(long)]
-        parameters: Option<String>,
-
-        /// Verbose model or file description
-        #[arg(long)]
-        description: Option<String>,
-
-        /// Mirror download URLs
-        #[arg(short, long)]
-        mirror: Vec<String>,
+        /// Mirror URL endpoints
+        #[arg(long = "mirror")]
+        mirrors: Vec<String>,
     },
-
-    /// Inspect entries in an existing catalog file
+    /// List available files in a local or remote catalog
     List {
-        /// Target catalog XML file path
-        #[arg(short, long)]
-        catalog: PathBuf,
+        /// Path or URL to the .lading catalog file
+        #[arg(long)]
+        catalog: String,
     },
+    /// Inspect details for a specific file entry in a catalog
+    Info {
+        /// Path or URL to the .lading catalog file
+        #[arg(long)]
+        catalog: String,
 
-    /// Download a file entry defined in a catalog
+        /// File entry name
+        #[arg(long)]
+        name: String,
+    },
+    /// Download a file entry from a catalog
     Get {
-        /// Target catalog XML file path
-        #[arg(short, long)]
-        source: PathBuf,
+        /// Path or URL to the .lading catalog file
+        #[arg(long)]
+        source: String,
 
-        /// Name of file entry in catalog to download
-        #[arg(short, long)]
+        /// Specific file name to fetch from catalog
+        #[arg(long)]
         name: Option<String>,
 
-        /// Runtime mirror URL override
-        #[arg(short, long)]
-        url: Option<String>,
-
-        /// Local output destination path
-        #[arg(short, long)]
+        /// Destination output file path
+        #[arg(long)]
         output: Option<PathBuf>,
     },
 }
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
     match cli.command {
         Commands::Pack {
             input,
             output,
-            chunk_size,
             title,
             family,
-            model_size,
             quantization,
-            adaptation,
-            parameters,
-            description,
-            mirror,
+            mirrors,
         } => {
             let mut builder = Builder::new();
-            builder
-                .add_file_from_disk(
-                    &input,
-                    chunk_size,
-                    title,
-                    family,
-                    model_size,
-                    quantization,
-                    adaptation,
-                    parameters,
-                    description,
-                    mirror,
-                )
-                .context("Failed to index input file into catalog")?;
+            builder.add_file_from_disk(
+                &input,
+                DEFAULT_CHUNK_SIZE,
+                title,
+                family,
+                None, // model_size
+                quantization,
+                None, // adaptation
+                None, // parameters
+                None, // description
+                mirrors,
+            )?;
 
-            let catalog_xml =
-                builder.build().context("Failed to build catalog XML")?;
+            let xml_out = builder.build()?;
 
             if let Some(out_path) = output {
-                fs::write(&out_path, catalog_xml)
-                    .context("Failed to write output file")?;
-                eprintln!("Catalog successfully written to {:?}", out_path);
+                fs::write(out_path, xml_out)?;
             } else {
-                io::stdout().write_all(catalog_xml.as_bytes())?;
+                io::stdout().write_all(xml_out.as_bytes())?;
             }
         }
-
         Commands::List { catalog } => {
-            let xml_content = fs::read_to_string(&catalog)
-                .context("Failed to read catalog file")?;
-            let parsed = Catalog::parse(&xml_content)
-                .context("Failed to parse catalog XML")?;
-
-            println!("Catalog Version: {}", parsed.version);
-            println!("\nFiles ({}):", parsed.files.len());
-            for file in &parsed.files {
-                println!("- Name: {}", file.name);
-                println!("  Size: {} bytes", file.file_size);
-                println!("  Chunk Size: {} bytes", file.chunk_size);
-                if let Some(f) = &file.family {
-                    println!("  Family: {}", f);
+            let cat = load_catalog(&catalog).await?;
+            println!("Catalog Version: {}", cat.version);
+            for file in cat.files() {
+                println!("File: {}", file.name);
+                if let Some(ref f) = file.family {
+                    println!("Family: {}", f);
                 }
-                if let Some(q) = &file.quantization {
-                    println!("  Quantization: {}", q);
+                if let Some(ref q) = file.quantization {
+                    println!("Quantization: {}", q);
                 }
-                let mirrors = file.mirror_urls();
-                if !mirrors.is_empty() {
-                    println!("  Mirrors ({}):", mirrors.len());
-                    for m in mirrors {
-                        println!("    * {}", m);
-                    }
+                for url in file.mirror_urls() {
+                    println!("  - {}", url);
                 }
             }
         }
-
+        Commands::Info { catalog, name } => {
+            let cat = load_catalog(&catalog).await?;
+            if let Some(file) = cat.get(&name) {
+                println!("Name:         {}", file.name);
+                println!("File Size:    {} bytes", file.file_size);
+                println!("Chunk Size:   {} bytes", file.chunk_size);
+                if let Some(ref title) = file.title {
+                    println!("Title:        {}", title);
+                }
+                if let Some(ref quant) = file.quantization {
+                    println!("Quantization: {}", quant);
+                }
+                println!("Mirrors:");
+                for url in file.mirror_urls() {
+                    println!("  - {}", url);
+                }
+            } else {
+                eprintln!("File '{}' not found in catalog.", name);
+                std::process::exit(1);
+            }
+        }
         Commands::Get {
             source,
             name,
-            url,
             output,
         } => {
-            let content = fs::read_to_string(&source)
-                .context("Failed to read catalog file")?;
-            let catalog = Catalog::parse(&content)
-                .context("Failed to parse catalog XML")?;
-
-            let target_file = if let Some(target_name) = name {
-                catalog.find_file(&target_name).ok_or_else(|| {
-                    anyhow::anyhow!(
-                        "File '{}' not found in catalog", 
-                        target_name)
+            let cat = load_catalog(&source).await?;
+            let file_entry = if let Some(target_name) = name {
+                cat.get(&target_name).ok_or_else(|| {
+                    format!("File '{}' not found in catalog", target_name)
                 })?
-            } else if catalog.files.len() == 1 {
-                &catalog.files[0]
             } else {
-                anyhow::bail!(
-                    "Multiple files in catalog. Specify target using --name"
-                );
+                let msg = "Catalog contains no file entries";
+                cat.files()
+                    .first()
+                    .ok_or_else(|| msg.to_string())?
             };
 
-            let dest_path =
-                output.unwrap_or_else(|| PathBuf::from(&target_file.name));
-
-            eprintln!("Downloading: {}", target_file.name);
-            eprintln!("Destination: {:?}", dest_path);
+            let dst_path = output.unwrap_or_else(|| {
+                PathBuf::from(&file_entry.name)
+            });
 
             let downloader = Downloader::new();
             downloader
                 .download_file(
-                    target_file,
-                    url.as_deref(),
-                    &dest_path,
-                    |downloaded, total| {
-                        let percent = if total > 0 {
-                            (downloaded as f64 / total as f64) * 100.0
-                        } else {
-                            0.0
-                        };
-                        eprint!(
-                            "\rProgress: {} / {} bytes ({:.2}%)",
-                            downloaded, total, percent
-                        );
-                        let _ = io::stderr().flush();
-                    },
+                    file_entry,
+                    None,
+                    &dst_path,
+                    |_read, _total| {},
                 )
-                .await
-                .context("Download failed")?;
+                .await?;
 
-            eprintln!("\nDownload completed successfully.");
+            eprintln!("Download completed successfully.");
         }
     }
 
     Ok(())
+}
+
+/// Helper function to load a Catalog
+/// This supports either a remote URL or local file path
+async fn load_catalog(source: &str) -> Result<Catalog, Error> {
+    if source.starts_with("http://") || source.starts_with("https://") {
+        Catalog::fetch(source).await
+    } else {
+        let content = fs::read_to_string(PathBuf::from(source))
+            .map_err(|e| Error::XmlParse(e.to_string()))?;
+        Catalog::parse(&content)
+    }
 }
