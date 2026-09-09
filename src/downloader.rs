@@ -94,23 +94,23 @@ impl Downloader {
     /// use laded::downloader::Downloader;
     /// use laded::file::File;
     /// use tempfile::NamedTempFile;
-
+    ///
     /// #[tokio::main]
     /// async fn main() {
     ///     let server = MockServer::start();
     ///     let payload = b"hello world";
-
+    ///
     ///     // SHA-256 of "hello world" encoded in Base64
     ///     let base64_hash =
     ///         "uU0nuZNNPgilLlLX2n2r+sSE7+N6U4DukIj3rOLvzek=\n";
-
+    ///
     ///     let _mock = server.mock(|when, then| {
     ///         when.method(GET)
     ///             .path("/test.bin")
     ///             .header("Range", "bytes=0-10");
     ///         then.status(200).body(payload);
     ///     });
-
+    ///
     ///     let entry = File {
     ///         name: "test.bin".to_string(),
     ///         file_size: 11,
@@ -125,11 +125,11 @@ impl Downloader {
     ///         mirrors: None,
     ///         hash: base64_hash.to_string(),
     ///     };
-
+    ///
     ///     let temp_out = NamedTempFile::new().unwrap();
     ///     let downloader = Downloader::new();
     ///     let mock_url = format!("{}/test.bin", server.base_url());
-
+    ///
     ///     let result = downloader
     ///         .download_file(
     ///             &entry,
@@ -138,7 +138,7 @@ impl Downloader {
     ///             |_curr, _total| {},
     ///         )
     ///         .await;
-
+    ///
     ///     assert!(result.is_ok());
     ///     let downloaded_data = std::fs::read(temp_out.path()).unwrap();
     ///     assert_eq!(downloaded_data, payload);
@@ -155,7 +155,7 @@ impl Downloader {
     ///
     /// #[tokio::main]
     /// async fn main() {
-    ///     let hsh = "uU0nuZNNPgilLlLX2n2r+sSE7+N6U4DukIj3rOLvzek=\n"
+    ///     let hsh = "uU0nuZNNPgilLlLX2n2r+sSE7+N6U4DukIj3rOLvzek=\n";
     ///     let entry = File {
     ///         name: "no-mirrors.bin".to_string(),
     ///         file_size: 11,
@@ -304,5 +304,3 @@ impl Downloader {
         Ok(())
     }
 }
-
-

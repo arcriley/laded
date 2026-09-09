@@ -1,0 +1,14 @@
+# Generated build artifacts
+/target/
+
+# Cargo dependency lock file (recommended for libraries)
+Cargo.lock
+
+# Cargo backup files
+**/*.rs.bk
+
+# IDE and editor specific files
+.idea/
+.vscode/
+*.swp
+*.swo

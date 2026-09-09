@@ -157,7 +157,7 @@ impl File {
     /// ```rust
     /// use laded::file::File;
     ///
-    /// let hash_str = "uU0nuZNNPgilLlLX2n2r+sSE7+N6U4DukIj3rOLvzek=\n"
+    /// let hash_str = "uU0nuZNNPgilLlLX2n2r+sSE7+N6U4DukIj3rOLvzek=\n";
     /// let file = File {
     ///     name: "test.bin".to_string(),
     ///     file_size: 11,
@@ -187,7 +187,7 @@ impl File {
     /// ```rust
     /// use laded::file::File;
     ///
-    /// let hash_str = "uU0nuZNNPgilLlLX2n2r+sSE7+N6U4DukIj3rOLvzek=\n"
+    /// let hash_str = "uU0nuZNNPgilLlLX2n2r+sSE7+N6U4DukIj3rOLvzek=\n";
     /// let file = File {
     ///     name: "test.bin".to_string(),
     ///     file_size: 11,

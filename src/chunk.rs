@@ -96,8 +96,10 @@ impl Chunk {
     /// use laded::chunk::Chunk;
     ///
     /// // Handles mixed whitespace, newlines, tabs, and spaces
-    /// let base64_str = concat!(" \r\nuU0nuZNNPgilLlLX2n2r+sSE7"
-    ///                          "+N6U4DukIj3rOLvzek=\n \t \n\n");
+    /// let base64_str = concat!(
+    ///     " \r\nuU0nuZNNPgilLlLX2n2r+sSE7",
+    ///     "+N6U4DukIj3rOLvzek=\n \t \n\n"
+    /// );
     /// let hashes = Chunk::decode_base64_hashes(base64_str).unwrap();
     ///
     /// assert_eq!(hashes.len(), 1);
@@ -160,7 +162,6 @@ impl Chunk {
     /// assert!(chunk.verify(payload));
     /// ```
     ///
-
     pub fn verify(&self, payload: &[u8]) -> bool {
         if payload.len() as u64 != self.size {
             return false;
