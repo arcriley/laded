@@ -1,4 +1,4 @@
-/*  src/catalog.rs  XML catalog parser and file entry container.
+/*  src/catalog.rs  XML catalog parser and package entry container.
  *
  *  Copyright 2026 Emerge Cooperative
  *
@@ -24,10 +24,9 @@
  *                                                                    */
 
 use crate::error::Error;
-use crate::file::File;
+use crate::package::Package;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename = "catalog")]
@@ -35,8 +34,8 @@ pub struct Catalog {
     #[serde(rename = "@version")]
     pub version: String,
 
-    #[serde(rename = "file", default)]
-    pub files: Vec<File>,
+    #[serde(rename = "package", default)]
+    pub packages: Vec<Package>,
 }
 
 impl Catalog {
@@ -44,33 +43,6 @@ impl Catalog {
     ///
     /// # Arguments
     /// - `url`: Public HTTP/HTTPS endpoint pointing to `.lading` file.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use httpmock::prelude::*;
-    /// use laded::catalog::Catalog;
-    ///
-    /// #[tokio::main]
-    /// async fn main() {
-    ///     let server = MockServer::start();
-    ///     let xml_payload = r#"<?xml version="1.0" encoding="UTF-8"?>
-    /// <catalog version="1.0">
-    ///     <file name="test.gguf" file_size="10" chunk_size="10">
-    ///         <hash>hash</hash>
-    ///     </file>
-    /// </catalog>"#;
-    ///
-    ///     let _mock = server.mock(|when, then| {
-    ///         when.method(GET).path("/catalog.lading");
-    ///         then.status(200).body(xml_payload);
-    ///     });
-    ///
-    ///     let catalog_url = server.url("/catalog.lading");
-    ///     let catalog = Catalog::fetch(&catalog_url).await.unwrap();
-    ///     assert_eq!(catalog.files().len(), 1);
-    /// }
-    /// ```
     pub async fn fetch(url: &str) -> Result<Self, Error> {
         let client = Client::new();
         let response = client
@@ -103,94 +75,34 @@ impl Catalog {
     ///
     /// let xml_data = r#"<?xml version="1.0" encoding="UTF-8"?>
     /// <catalog version="1.0">
-    ///     <file name="model-a.gguf" file_size="100" chunk_size="50">
-    ///         <mirrors>
-    ///             <mirror src="https://mirror1.com/a.gguf"/>
-    ///         </mirrors>
-    ///         <hash>hash</hash>
-    ///     </file>
-    ///     <!-- Duplicate entry ignored -->
-    ///     <file name="model-a.gguf" file_size="100" chunk_size="50">
-    ///         <hash>hash</hash>
-    ///     </file>
+    ///     <package title="Llama 3 8B Instruct" description="Fine-tuned model">
+    ///         <file name="llama-3.gguf" file_size="100" chunk_size="50">
+    ///             <mirrors>
+    ///                 <mirror src="[https://mirror1.com/a.gguf](https://mirror1.com/a.gguf)"/>
+    ///             </mirrors>
+    ///             <hash>hash</hash>
+    ///         </file>
+    ///     </package>
     /// </catalog>"#;
     ///
     /// let catalog = Catalog::parse(xml_data).unwrap();
-    /// assert_eq!(catalog.files().len(), 1);
-    ///
-    /// let file = catalog.get("model-a.gguf");
-    /// assert!(file.is_some());
-    /// assert_eq!(
-    ///     file.unwrap().mirror_urls(),
-    ///     vec!["https://mirror1.com/a.gguf".to_string()]
-    /// );
+    /// assert_eq!(catalog.packages().len(), 1);
+    /// assert_eq!(catalog.packages()[0].title, "Llama 3 8B Instruct");
     /// ```
     pub fn parse(xml_str: &str) -> Result<Self, Error> {
         let raw_catalog: Catalog = quick_xml::de::from_str(xml_str)
             .map_err(|e| Error::XmlParse(e.to_string()))?;
 
-        let mut seen_names = HashSet::new();
-        let mut unique_files = Vec::new();
-
-        for file in raw_catalog.files {
-            if seen_names.contains(&file.name) {
-                eprintln!(
-                    "Warning: Duplicate file entry '{}' skipped.",
-                    file.name
-                );
-                continue;
-            }
-            seen_names.insert(file.name.clone());
-            unique_files.push(file);
-        }
-
-        Ok(Catalog {
-            version: raw_catalog.version,
-            files: unique_files,
-        })
+        Ok(raw_catalog)
     }
 
-    /// Returns a reference slice of all file entries in the catalog.
-    pub fn files(&self) -> &[File] {
-        &self.files
+    /// Returns a reference slice of all package entries in the catalog.
+    pub fn packages(&self) -> &[Package] {
+        &self.packages
     }
 
-    /// Finds a file entry within the catalog by name.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use laded::catalog::Catalog;
-    /// use laded::file::File;
-    ///
-    /// let catalog = Catalog {
-    ///     version: "1.0".to_string(),
-    ///     files: vec![File {
-    ///         name: "test.bin".to_string(),
-    ///         file_size: 10,
-    ///         chunk_size: 10,
-    ///         title: None,
-    ///         family: None,
-    ///         model_size: None,
-    ///         quantization: None,
-    ///         adaptation: None,
-    ///         parameters: None,
-    ///         description: None,
-    ///         mirrors: None,
-    ///         hash: String::new(),
-    ///     }],
-    /// };
-    ///
-    /// assert!(catalog.get("test.bin").is_some());
-    /// assert!(catalog.get("missing.bin").is_none());
-    /// ```
-    pub fn get(&self, name: &str) -> Option<&File> {
-        self.files.iter().find(|f| f.name == name)
-    }
-
-    /// Deprecated backward compatibility alias for `get`.
-    #[deprecated(since = "1.1.0", note = "Use `get` instead")]
-    pub fn find_file(&self, name: &str) -> Option<&File> {
-        self.get(name)
+    /// Finds a package entry within the catalog by title.
+    pub fn get_package(&self, title: &str) -> Option<&Package> {
+        self.packages.iter().find(|p| p.title == title)
     }
 }

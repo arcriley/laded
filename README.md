@@ -36,32 +36,121 @@ alongside file chunk maps.
 
 ## Catalog Architecture
 
-Catalogs are structured XML manifests declaring target file attributes, chunk
-sizes, mirror endpoints, and whitespace-delimited Base64 SHA-256 digests:
+Catalogs are structured XML manifests of available packages. Each package is
+intended to be displayed to the user as an item available to download.
 
-```xml
+'''xml
 <?xml version="1.0" encoding="UTF-8"?>
 <catalog version="1.0">
-  <file 
-    name="llama-3-8b-instruct.Q5_K_M.gguf" 
-    file_size="5730000000" 
-    chunk_size="10485760"
-    title="Llama 3 8B Instruct"
-    family="Llama"
-    model_size="8B"
-    quantization="Q5_K_M"
-    description="Fine-tuned instruct model quantized for edge deployment.">
-    <mirrors>
-      <mirror src="[https://mirror1.example.com/models/llama-3-8b.gguf](https://mirror1.example.com/models/llama-3-8b.gguf)"/>
-      <mirror src="[https://mirror2.example.com/models/llama-3-8b.gguf](https://mirror2.example.com/models/llama-3-8b.gguf)"/>
-    </mirrors>
-    <hash>
-      uU0nuZNNPgilLlLX2n2r+sSE7+N6U4DukIj3rOLvzek=
-      41920b348e0c6ff2ef9b7e3ee9308726aa5250fa717883e073ff6a936a9325a4=
-    </hash>
-  </file>
+  <package
+      title="Llama 3 8B Instruct"
+      description="Fine-tuned instruct model quantized for edge deployment.">
+    <file
+        name="llama-3-8b-instruct.Q5_K_M.gguf" 
+        file_size="5730000000" 
+        chunk_size="10485760">
+      <mirrors>
+        <mirror src="[https://mirror1.example.com/models/llama-3-8b.gguf](https://mirror1.example.com/models/llama-3-8b.gguf)"/>
+        <mirror src="[https://mirror2.example.com/models/llama-3-8b.gguf](https://mirror2.example.com/models/llama-3-8b.gguf)"/>
+      </mirrors>
+      <hash>
+        uU0nuZNNPgilLlLX2n2r+sSE7+N6U4DukIj3rOLvzek=
+        41920b348e0c6ff2ef9b7e3ee9308726aa5250fa717883e073ff6a936a9325a4=
+      </hash>
+    </file>
+  </package>
 </catalog>
 ```
+
+A combination of &lt;directory&gt; and &lt;file&gt; may be used;
+
+'''xml
+<?xml version="1.0" encoding="UTF-8"?>
+<catalog version="1.0">
+  <package
+      title="GLM 5.2 744B INT4"
+      description="Flagship MoE model from z.ai ">
+    <directory name="glm-5.2-colibri-int4">
+      <!-- Root Configuration Files -->
+      <file 
+          name="config.json" 
+          file_size="2840" 
+          chunk_size="2840">
+        <mirrors>
+          <mirror src="https://huggingface.co/jlnsrk/GLM-5.2-colibri-int4/resolve/main/config.json"/>
+        </mirrors>
+        <hash>
+          ...
+        </hash>
+      </file>
+
+      <file 
+          name="colibri_config.json" 
+          file_size="1248" 
+          chunk_size="1248">
+        <mirrors>
+          <mirror src="https://huggingface.co/jlnsrk/GLM-5.2-colibri-int4/resolve/main/colibri_config.json"/>
+        </mirrors>
+        <hash>
+          ...
+        </hash>
+      </file>
+
+      <file 
+          name="tokenizer.json" 
+          file_size="1048576" 
+          chunk_size="1048576">
+        <mirrors>
+          <mirror src="https://huggingface.co/jlnsrk/GLM-5.2-colibri-int4/resolve/main/tokenizer.json"/>
+        </mirrors>
+        <hash>
+          ...
+        </hash>
+      </file>
+
+      <!-- Sharded Model Weights in a Subdirectory -->
+      <directory name="weights">
+        <file 
+            name="model-00001-of-00028.safetensors" 
+            file_size="14188742948" 
+            chunk_size="10485760">
+          <mirrors>
+            <mirror src="https://huggingface.co/jlnsrk/GLM-5.2-colibri-int4/resolve/main/weights/model-00001-of-00028.safetensors"/>
+          </mirrors>
+          <hash>
+            ...
+          </hash>
+        </file>
+
+        <file 
+            name="model-00002-of-00028.safetensors" 
+            file_size="14188742948" 
+            chunk_size="10485760">
+          <mirrors>
+            <mirror src="https://huggingface.co/jlnsrk/GLM-5.2-colibri-int4/resolve/main/weights/model-00002-of-00028.safetensors"/>
+          </mirrors>
+          <hash>
+            ...
+          </hash>
+        </file>
+
+        <!-- ... Shards 00003 through 00027 ... -->
+
+        <file 
+            name="model-00028-of-00028.safetensors" 
+            file_size="234802560" 
+            chunk_size="10485760">
+          <mirrors>
+            <mirror src="https://huggingface.co/jlnsrk/GLM-5.2-colibri-int4/resolve/main/weights/model-00028-of-00028.safetensors"/>
+          </mirrors>
+          <hash>
+            ...
+          </hash>
+        </file>
+      </directory>
+    </directory>
+  </package>
+</catalog>```
 
 ### Build and Install
 

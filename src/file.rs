@@ -99,7 +99,7 @@ impl File {
     ///     description: None,
     ///     mirrors: Some(Mirrors {
     ///         items: vec![Mirror {
-    ///             src: "https://example.com/test.bin".to_string(),
+    ///             src: "[https://example.com/test.bin](https://example.com/test.bin)".to_string(),
     ///         }],
     ///     }),
     ///     hash: String::new(),
@@ -107,7 +107,7 @@ impl File {
     ///
     /// assert_eq!(
     ///     file.mirror_urls(),
-    ///     vec!["https://example.com/test.bin".to_string()]
+    ///     vec!["[https://example.com/test.bin](https://example.com/test.bin)".to_string()]
     /// );
     /// ```
     pub fn mirror_urls(&self) -> Vec<String> {
@@ -180,7 +180,7 @@ impl File {
         Chunk::decode_base64_hashes(&self.hash)
     }
 
-    /// Constructs a list of `Chunk` descriptors representing all chunks
+    /// Constructs a list of `Chunk` descriptors representing all chunks.
     ///
     /// # Examples
     ///

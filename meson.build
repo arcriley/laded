@@ -24,7 +24,7 @@
 
 
 project('laded', 'rust',
-          version: '0.1.0',
+          version: '1.2.0',
     meson_version: '>= 1.0.0',
   default_options: [ 'warning_level=2', 'werror=false' ],
 )
@@ -58,17 +58,12 @@ cargo_cmd = ' '.join([
   '&&', 'cp', built_binary_path, '@OUTPUT@'
 ])
 
-cargo_bin = custom_target(
+laded_bin = custom_target(
   'laded',
   output: 'laded',
   build_by_default: true,
   install: true,
   install_dir: get_option('bindir'),
-  command: [
-    'cargo', 'build',
-    '--manifest-path', '@INPUT0@',
-    '--release',
-    '--bin', 'laded'
-  ],
+  command: [sh_bin, '-c', cargo_cmd],
   input: files('Cargo.toml')
 )

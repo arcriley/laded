@@ -25,7 +25,7 @@
 # Directives defining package identity for Cargo
 [package]
 name = "laded"
-version = "1.1.0"
+version = "1.2.0"
 edition = "2021"
 authors = ["Emerge Cooperative"]
 license = "MIT"
@@ -76,7 +76,9 @@ thiserror = "1.0"
 anyhow = "1.0"
 
 [dev-dependencies]
+# Test harnesses, assertion utilities, and mock servers:
 assert_cmd = "2.0"
 httpmock = "0.7"
 predicates = "3.0"
 tempfile = "3.8"
+warp = "0.3"

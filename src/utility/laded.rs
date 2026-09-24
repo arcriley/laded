@@ -44,9 +44,9 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Pack a file into a .lading XML catalog
+    /// Pack a file or directory into a .lading XML catalog
     Pack {
-        /// Input file path to generate catalog for
+        /// Input path (file or directory) to generate catalog for
         #[arg(long)]
         input: PathBuf,
 
@@ -66,37 +66,37 @@ enum Commands {
         #[arg(long)]
         quantization: Option<String>,
 
-        /// Mirror URL endpoints
+        /// Base mirror URL or endpoints
         #[arg(long = "mirror")]
         mirrors: Vec<String>,
     },
-    /// List available files in a local or remote catalog
+    /// List available packages and files in a local or remote catalog
     List {
         /// Path or URL to the .lading catalog file
         #[arg(long)]
         catalog: String,
     },
-    /// Inspect details for a specific file entry in a catalog
+    /// Inspect details for a specific package or file entry in a catalog
     Info {
         /// Path or URL to the .lading catalog file
         #[arg(long)]
         catalog: String,
 
-        /// File entry name
+        /// Entry name or package title
         #[arg(long)]
         name: String,
     },
-    /// Download a file entry from a catalog
+    /// Download package files from a catalog
     Get {
         /// Path or URL to the .lading catalog file
         #[arg(long)]
         source: String,
 
-        /// Specific file name to fetch from catalog
+        /// Specific package title or file name to fetch from catalog
         #[arg(long)]
         name: Option<String>,
 
-        /// Destination output file path
+        /// Destination output directory
         #[arg(long)]
         output: Option<PathBuf>,
     },
@@ -116,18 +116,45 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             mirrors,
         } => {
             let mut builder = Builder::new();
-            builder.add_file_from_disk(
-                &input,
-                DEFAULT_CHUNK_SIZE,
-                title,
-                family,
-                None, // model_size
-                quantization,
-                None, // adaptation
-                None, // parameters
-                None, // description
-                mirrors,
-            )?;
+
+            if input.is_dir() {
+                let base_url = mirrors.first().cloned().unwrap_or_default();
+                let directory = Builder::add_directory_from_disk(&input, DEFAULT_CHUNK_SIZE, &base_url)?;
+                let package_title = title.unwrap_or_else(|| {
+                    input
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("package")
+                        .to_string()
+                });
+
+                let package = laded::package::Package {
+                    title: package_title,
+                    description: None,
+                    family,
+                    model_size: None,
+                    quantization,
+                    adaptation: None,
+                    parameters: None,
+                    files: vec![],
+                    directories: vec![directory],
+                };
+
+                builder.add_package(package);
+            } else {
+                builder.add_file_from_disk(
+                    &input,
+                    DEFAULT_CHUNK_SIZE,
+                    title,
+                    family,
+                    None, // model_size
+                    quantization,
+                    None, // adaptation
+                    None, // parameters
+                    None, // description
+                    mirrors,
+                )?;
+            }
 
             let xml_out = builder.build()?;
 
@@ -140,27 +167,48 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Commands::List { catalog } => {
             let cat = load_catalog(&catalog).await?;
             println!("Catalog Version: {}", cat.version);
-            for file in cat.files() {
-                println!("File: {}", file.name);
-                if let Some(ref f) = file.family {
-                    println!("Family: {}", f);
+            for pkg in &cat.packages {
+                println!("Package: {}", pkg.title);
+                if let Some(ref f) = pkg.family {
+                    println!("  Family: {}", f);
                 }
-                if let Some(ref q) = file.quantization {
-                    println!("Quantization: {}", q);
+                if let Some(ref q) = pkg.quantization {
+                    println!("  Quantization: {}", q);
                 }
-                for url in file.mirror_urls() {
-                    println!("  - {}", url);
+                for file in pkg.all_files() {
+                    println!("  File: {}", file.name);
+                    for url in file.mirror_urls() {
+                        println!("    - {}", url);
+                    }
                 }
             }
         }
         Commands::Info { catalog, name } => {
             let cat = load_catalog(&catalog).await?;
-            if let Some(file) = cat.get(&name) {
-                println!("Name:         {}", file.name);
-                println!("File Size:    {} bytes", file.file_size);
-                println!("Chunk Size:   {} bytes", file.chunk_size);
+            let found_pkg = cat.packages.iter().find(|p| p.title == name);
+
+            if let Some(pkg) = found_pkg {
+                println!("Package Title: {}", pkg.title);
+                if let Some(ref desc) = pkg.description {
+                    println!("Description:   {}", desc);
+                }
+                if let Some(ref family) = pkg.family {
+                    println!("Family:        {}", family);
+                }
+                if let Some(ref quant) = pkg.quantization {
+                    println!("Quantization:  {}", quant);
+                }
+                println!("Total Size:    {} bytes", pkg.total_size());
+                println!("Files:");
+                for file in pkg.all_files() {
+                    println!("  - {} ({} bytes)", file.name, file.file_size);
+                }
+            } else if let Some(file) = cat.packages.iter().flat_map(|p| p.all_files()).find(|f| f.name == name) {
+                println!("Name:       {}", file.name);
+                println!("File Size:  {} bytes", file.file_size);
+                println!("Chunk Size: {}", file.chunk_size);
                 if let Some(ref title) = file.title {
-                    println!("Title:        {}", title);
+                    println!("Title:      {}", title);
                 }
                 if let Some(ref quant) = file.quantization {
                     println!("Quantization: {}", quant);
@@ -170,7 +218,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("  - {}", url);
                 }
             } else {
-                eprintln!("File '{}' not found in catalog.", name);
+                eprintln!("Package or file '{}' not found in catalog.", name);
                 std::process::exit(1);
             }
         }
@@ -180,30 +228,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             output,
         } => {
             let cat = load_catalog(&source).await?;
-            let file_entry = if let Some(target_name) = name {
-                cat.get(&target_name).ok_or_else(|| {
-                    format!("File '{}' not found in catalog", target_name)
-                })?
-            } else {
-                let msg = "Catalog contains no file entries";
-                cat.files()
-                    .first()
-                    .ok_or_else(|| msg.to_string())?
-            };
-
-            let dst_path = output.unwrap_or_else(|| {
-                PathBuf::from(&file_entry.name)
-            });
-
             let downloader = Downloader::new();
-            downloader
-                .download_file(
-                    file_entry,
-                    None,
-                    &dst_path,
-                    |_read, _total| {},
-                )
-                .await?;
+            let dst_dir = output.unwrap_or_else(|| PathBuf::from("."));
+
+            if let Some(target_name) = name {
+                if let Some(pkg) = cat.packages.iter().find(|p| p.title == target_name) {
+                    downloader
+                        .download_package(pkg, &dst_dir, |_read, _total| {})
+                        .await?;
+                } else if let Some(file) = cat.packages.iter().flat_map(|p| p.all_files()).find(|f| f.name == target_name) {
+                    let dst_file = dst_dir.join(&file.name);
+                    downloader
+                        .download_file(&file, None, &dst_file, |_read, _total| {})
+                        .await?;
+                } else {
+                    return Err(format!("Entry '{}' not found in catalog", target_name).into());
+                }
+            } else if let Some(pkg) = cat.packages.first() {
+                downloader
+                    .download_package(pkg, &dst_dir, |_read, _total| {})
+                    .await?;
+            } else {
+                return Err("Catalog contains no packages or files".into());
+            }
 
             eprintln!("Download completed successfully.");
         }

@@ -22,7 +22,7 @@
  *  CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  *  SOFTWARE.
  *                                                                    */
- 
+
 //! `laded` is a library and command-line utility designed for
 //! generating, parsing, and downloading chunk-verified binary file
 //! archives using catalogs.
@@ -30,13 +30,17 @@
 pub mod builder;
 pub mod catalog;
 pub mod chunk;
+pub mod directory;
 pub mod downloader;
 pub mod error;
 pub mod file;
+pub mod package;
 
 pub use builder::Builder;
 pub use catalog::Catalog;
 pub use chunk::Chunk;
+pub use directory::Directory;
 pub use downloader::Downloader;
 pub use error::Error;
 pub use file::File;
+pub use package::Package;
