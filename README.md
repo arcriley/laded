@@ -39,7 +39,7 @@ alongside file chunk maps.
 Catalogs are structured XML manifests of available packages. Each package is
 intended to be displayed to the user as an item available to download.
 
-'''xml
+```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <catalog version="1.0">
   <package
@@ -64,7 +64,7 @@ intended to be displayed to the user as an item available to download.
 
 A combination of &lt;directory&gt; and &lt;file&gt; may be used;
 
-'''xml
+```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <catalog version="1.0">
   <package
